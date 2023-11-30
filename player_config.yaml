@@ -1,0 +1,13 @@
+serial-port: /dev/cu.usbserial-0213DC8F
+baud-rate: 115200
+x-values:
+  - 0   # min x value, -90 from csv
+  - 180 # max x value, 90 from csv
+y-values:
+  - 0   # min y value, -90 from csv
+  - 180 # max y value, 90 from csv
+max-step: 40
+step: 1
+csv-files:
+  - angles_0.csv
+  - angles_1.csv

@@ -1,0 +1,12 @@
+video-source: 1
+HSV-values:
+  lower-hsv: [18, 128, 161]
+  upper-hsv: [36, 255, 255]
+show-mask: false
+frame-width: 1200
+broker-address: 109.237.25.238
+diameter-bounds: [30, 100]
+moving-average-strength: 3
+password: password
+topic-prefix: groupName
+username: dfpi
