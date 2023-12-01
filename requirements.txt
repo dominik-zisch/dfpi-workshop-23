@@ -1,6 +1,12 @@
+altgraph==0.17.4
 imutils==0.5.4
+macholib==1.16.3
 numpy==1.26.2
 opencv-python==4.8.1.78
+packaging==23.2
 paho-mqtt==1.6.1
+pyinstaller==6.2.0
+pyinstaller-hooks-contrib==2023.10
 pyserial==3.5
 PyYAML==6.0.1
+scipy==1.11.4

@@ -45,8 +45,10 @@ lower_hsv = np.array(config['HSV-values']['lower-hsv'])
 upper_hsv = np.array(config['HSV-values']['upper-hsv'])
 show_mask = config['show-mask']
 frame_width = config['frame-width']
-diameter_bounds = tuple(config['diameter-bounds'])
+diameter_bounds = config['diameter-bounds']
+angle_bounds = config['angle-bounds']
 moving_average_strength = config['moving-average-strength']
+enable_mqtt = config['enable-mqtt']
 broker_address = config['broker-address']
 username = config['username']
 password = config['password']
@@ -125,10 +127,11 @@ def on_message(client, userdata, msg):
     if msg_id == unique_id:
         return
     
-    if command == "START_RECORDING" and not is_recording:
-        start_recording()
-    elif command == "STOP_RECORDING" and is_recording:
-        stop_recording()
+    if enable_mqtt:
+        if command == "START_RECORDING" and not is_recording:
+            start_recording()
+        elif command == "STOP_RECORDING" and is_recording:
+            stop_recording()
 
 
 
@@ -145,7 +148,7 @@ def start_recording():
             recording_count += 1
         csv_file = open(get_unique_filename('angles', recording_count), 'w', newline='')
         csv_writer = csv.writer(csv_file)
-        csv_writer.writerow(['Time', 'Pos X', 'Pos Y', 'Diameter', 'Angle_X', 'Angle_Y'])
+        csv_writer.writerow(['Time', 'Width', 'Height', 'Base X', 'Base Y', 'Pos X', 'Pos Y', 'Diameter', 'Angle_X', 'Angle_Y'])
         recording_start_time = time.time()
         
 # -----------------------------------------/
@@ -160,11 +163,6 @@ def stop_recording():
             csv_writer = None
 
 
-
-
-
-
-
 # ===========================================================================//
 # --------------------------------------------------------// Main program logic
 
@@ -174,13 +172,14 @@ if __name__ == '__main__':
     video_path = args.video
 
     # Initialize MQTT client
-    mqtt_client = mqtt.Client()
-    mqtt_client.username_pw_set(username, password)
-    mqtt_client.on_connect = on_connect
-    mqtt_client.on_disconnect = on_disconnect
-    mqtt_client.on_message = on_message
-    mqtt_client.connect(broker_address, 1883, 60)
-    mqtt_client.loop_start()
+    if enable_mqtt:
+        mqtt_client = mqtt.Client()
+        mqtt_client.username_pw_set(username, password)
+        mqtt_client.on_connect = on_connect
+        mqtt_client.on_disconnect = on_disconnect
+        mqtt_client.on_message = on_message
+        mqtt_client.connect(broker_address, 1883, 60)
+        mqtt_client.loop_start()
 
     # Initialize VideoStream or VideoCapture
     # if video_path is not None:
@@ -229,6 +228,12 @@ if __name__ == '__main__':
     # Create the shortcuts image
     shortcuts_image = create_shortcuts_image()
     cv2.namedWindow("Shortcuts")
+
+    # Calculate the linear, log and exponential parameters
+    input_range = np.array(diameter_bounds)
+    output_range = np.array(angle_bounds)
+    linear_params = calculate_linear_params(input_range, output_range)
+    log_params = calculate_log_params(input_range, output_range)
 
     # Main loop
     while (running):
@@ -297,8 +302,9 @@ if __name__ == '__main__':
                 # Calculate the angle
                 angle_x = calculate_angle(fixed_point, center)
                 diameter = radius * 2
-                # normalise diameter to be between -90 and +90
-                angle_y = (diameter - diameter_bounds[0]) / (diameter_bounds[1] - diameter_bounds[0]) * 180 - 90
+                
+                # angle_y = linear_interpolation(diameter, linear_params)
+                angle_y = logarithmic_interpolation(diameter, log_params)
 
                 pos_x_avg = pos_x_avg * (moving_average_strength - 1) / moving_average_strength + pos_x / moving_average_strength
                 pos_y_avg = pos_y_avg * (moving_average_strength - 1) / moving_average_strength + pos_y / moving_average_strength
@@ -313,7 +319,8 @@ if __name__ == '__main__':
         # Handle space to pause video
         if key == ord(" "):
             if not is_recording:
-                video_playing = not video_playing
+                if video_path is not None:
+                    video_playing = not video_playing
 
         # Handle 'e' key for starting to set exclusion zone
         if key == ord("e"):
@@ -345,18 +352,20 @@ if __name__ == '__main__':
         if key == ord("r"):
             if video_playing:
                 if is_recording:
-                    mqtt_client.publish(f"{topic_prefix}/record", unique_id + "|STOP_RECORDING")
-                    print(f"publishing {unique_id}|STOP_RECORDING to {topic_prefix}/record")
+                    if enable_mqtt:
+                        mqtt_client.publish(f"{topic_prefix}/record", unique_id + "|STOP_RECORDING")
+                        print(f"publishing {unique_id}|STOP_RECORDING to {topic_prefix}/record")
                     stop_recording()
                 else:
-                    mqtt_client.publish(f"{topic_prefix}/record", unique_id + "|START_RECORDING")
-                    print(f"publishing {unique_id}|START_RECORDING to {topic_prefix}/record")
+                    if enable_mqtt:
+                        mqtt_client.publish(f"{topic_prefix}/record", unique_id + "|START_RECORDING")
+                        print(f"publishing {unique_id}|START_RECORDING to {topic_prefix}/record")
                     start_recording()
 
         # Record data if recording is active
         if is_recording and csv_writer and current_time - last_recorded_time >= 0.1:
             elapsed_time = current_time - recording_start_time
-            csv_writer.writerow([elapsed_time, pos_x, pos_y, diameter, angle_x, angle_y])
+            csv_writer.writerow([elapsed_time, frame.shape[1], frame.shape[0], fixed_point[0], fixed_point[1], pos_x, pos_y, diameter, angle_x, angle_y])
             last_recorded_time = current_time
 
         if is_recording and csv_writer:
@@ -371,9 +380,9 @@ if __name__ == '__main__':
         cv2.circle(frame, circle_pos, 5, (0, 0, 255), -1)
 
         # Display the X, Y coordinates and the diameter
-        cv2.putText(frame, f"Angle: {angle_x:.2f} degrees", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
+        cv2.putText(frame, f"Angle X: {angle_x:.2f} degrees", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
         cv2.putText(frame, f"Diameter: {diameter:.2f} degrees", (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
-        cv2.putText(frame, f"Angle: {angle_y:.2f} degrees", (10, 90), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
+        cv2.putText(frame, f"Angle Y: {angle_y:.2f} degrees", (10, 90), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
 
         # Draw exclusion zone if points are available
         if exclusion_points:
@@ -402,8 +411,9 @@ if __name__ == '__main__':
     cv2.destroyAllWindows()
 
     # Disconnect MQTT client before closing
-    mqtt_client.loop_stop()
-    mqtt_client.disconnect()
+    if enable_mqtt:
+        mqtt_client.loop_stop()
+        mqtt_client.disconnect()
 
     print('Closing program!')
     sys.exit(0)

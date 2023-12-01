@@ -2,7 +2,7 @@ import yaml
 import math
 import numpy as np
 import cv2
-
+from scipy.optimize import curve_fit
 
 # ===========================================================================//
 # --------------------------------------------------------------// Config Files
@@ -98,14 +98,20 @@ def calculate_angle(p1, p2):
 # ---/ Create shortcuts image
 def create_shortcuts_image():
     # Create a blank image
-    image = np.zeros((200, 400, 3), dtype=np.uint8)
+    image = np.zeros((300, 600, 3), dtype=np.uint8)
     font = cv2.FONT_HERSHEY_SIMPLEX
 
     # Define your shortcuts and their descriptions
     shortcuts = {
-        "'r'": "Start/Stop Recording",
-        "'p'": "Set Fixed Point",
-        "'q'": "Quit"
+        "q": "Quit",
+        "space": "Play/Pause Video (only for video playback)",
+        "e": "Toggle Edit mode",
+        "Esc": "Exit Edit mode and save changes",
+        "Left mouse click": "Add a point",
+        "Right mouse click": "Move a point",
+        "del or backspace": "Delete a point",
+        "p": "Set Base Position",
+        "r": "Start/Stop Recording"
     }
 
     # Starting Y position
@@ -127,3 +133,53 @@ def draw_exclusion_zone(frame, points):
             cv2.line(frame, points[i - 1], point, (0, 0, 255), 2)
     if len(points) > 1:
         cv2.line(frame, points[-1], points[0], (0, 0, 255), 2)  # Close the zone
+
+
+
+# ===========================================================================//
+# ----------------------------------------------------------------// UI Helpers
+
+# -----------------------------------------/
+# ---/ 
+def calculate_linear_params(input_range, output_range):
+    # Linear function: y = mx + b
+    def linear_func(x, m, b):
+        return m * x + b
+    params, _ = curve_fit(linear_func, input_range, output_range)
+    return params  # Returns [m, b]
+
+# -----------------------------------------/
+# ---/ 
+def calculate_log_params(input_range, output_range):
+    # Logarithmic function: y = a * log(x) + b
+    def log_func(x, a, b):
+        return a * np.log(x) + b
+    params, _ = curve_fit(log_func, input_range, output_range)
+    return params  # Returns [a, b]
+
+# -----------------------------------------/
+# ---/ 
+def calculate_exp_params(input_range, output_range):
+    # Exponential function: y = a * exp(b * x)
+    def exp_func(x, a, b):
+        return a * np.exp(b * x)
+    params, _ = curve_fit(exp_func, input_range, output_range)
+    return params  # Returns [a, b]
+
+# -----------------------------------------/
+# ---/ 
+def linear_interpolation(x, linear_params):
+    m, b = linear_params
+    return m * x + b
+
+# -----------------------------------------/
+# ---/ 
+def logarithmic_interpolation(x, log_params):
+    a, b = log_params
+    return a * np.log(x) + b
+
+# -----------------------------------------/
+# ---/ 
+def exponential_interpolation(x, exp_params):
+    a, b = exp_params
+    return a * np.exp(b * x)

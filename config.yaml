@@ -4,9 +4,11 @@ HSV-values:
   upper-hsv: [36, 255, 255]
 show-mask: false
 frame-width: 1200
+enable-mqtt: true
 broker-address: 109.237.25.238
-diameter-bounds: [30, 100]
+diameter-bounds: [20, 170]
+angle-bounds: [-60, 60]
 moving-average-strength: 3
+username: dfpi
 password: password
 topic-prefix: groupName
-username: dfpi
